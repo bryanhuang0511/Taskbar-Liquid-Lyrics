@@ -1,0 +1,243 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: transparent !important;  /* 真透明：由 DWM 每像素 Alpha 合成 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Microsoft JhengHei UI', 'PingFang TC', sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 視窗比膠囊四周各大 4px 透明邊 (必須與 main.py 的 PAD 相同)：
+   抗鋸齒的圓弧邊緣不會被視窗邊界裁掉，也預留給外擴光暈 */
+body { padding: 4px; }
+
+.taskbar-capsule {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  overflow: hidden;
+  box-sizing: border-box;
+  cursor: grab;
+  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease;
+}
+
+.taskbar-capsule:active {
+  cursor: grabbing;
+}
+
+.taskbar-capsule.is-paused {
+  opacity: 0.90;
+}
+
+/* v1.1.0：standby 是純透明水晶；內容先淡出，休眠完成後由 JS 清空 DOM 並停止動畫迴圈。 */
+.taskbar-capsule.is-standby {
+  background: transparent !important;
+  background-clip: border-box !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  cursor: default;
+}
+.taskbar-capsule.is-standby .capsule-content,
+.taskbar-capsule.is-standby .capsule-art-box {
+  opacity: 0 !important;
+  transition: opacity 0.42s ease;
+}
+.taskbar-capsule.is-pure-audio .capsule-art-box { display: none !important; }
+
+/* 邊框統一規則（避免圓角邊緣的鋸齒 / 暗邊）：
+   1. 四邊「同寬同色」。逐邊不同寬度 / 顏色的 border 搭配 9999px 圓角，
+      Chromium 會在每段弧線的色彩交界處畫出硬邊階梯。
+   2. 上緣高光、下緣暗部改用 inset box-shadow 模擬（陰影本身有平滑抗鋸齒）。 */
+.taskbar-capsule.style-1 {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  box-shadow:
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.55),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.18);
+}
+
+/* 風格 2：背景是不透明色，所以「背景只畫到 padding-box」並讓邊框成為最外緣的唯一像素，
+   外緣只有一層抗鋸齒，不會再有背景在邊框下方疊出的暗邊。
+   邊框色 = 白 16% 疊在 #12141B 上的等效不透明色。 */
+.taskbar-capsule.style-2 {
+  background: rgb(18, 20, 27);
+  background-clip: padding-box;
+  border: 1px solid rgb(56, 58, 64);
+  box-shadow:
+    inset 0 1px 0.5px rgba(255, 255, 255, 0.30),
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.28),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.65);
+}
+
+.taskbar-capsule.style-3 {
+  background: rgba(18, 22, 36, 0.78);
+  border: 1px solid rgba(56, 189, 248, 0.40);
+  box-shadow:
+    inset 0 1px 1px rgba(168, 85, 247, 0.60),
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.30),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.45);
+}
+
+.taskbar-capsule.style-4 {
+  background: rgba(240, 245, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  box-shadow:
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.90),
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.75),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.16);
+}
+
+/* 邊緣診斷：config.json 設 "edge_test": true 時，膠囊變成純白、無邊框、無陰影、無內容。
+   在亮色 / 暗色桌布上看外緣：沒有暗環 = 合成管線正常，問題在 CSS；仍有暗環 = 合成層問題。 */
+.edge-test .taskbar-capsule {
+  background: #ffffff !important;
+  border: none !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+.edge-test #waveCanvas,
+.edge-test .capsule-content,
+.edge-test .capsule-art-box { display: none !important; }
+
+#waveCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.capsule-art-box {
+  position: relative;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-right: 12px;
+  background: rgba(255, 255, 255, 0.20);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.30);
+}
+
+.capsule-art-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.capsule-content {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.lyrics-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.lyric-line-active {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  text-align: center;
+  max-width: 100%;
+  line-height: 1.2;
+  transition: opacity 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), color 0.25s ease;
+  will-change: opacity, transform;
+}
+
+.track-marquee-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.track-marquee-text {
+  font-size: 16px;
+  white-space: nowrap;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  display: inline-block;
+  will-change: transform;
+  line-height: 1.2;
+  transition: color 0.25s ease;
+}
+
+.is-marquee {
+  animation: marquee-anim var(--marquee-duration, 14s) linear infinite;
+  animation-delay: 1.5s;
+}
+
+@keyframes marquee-anim {
+  0%, 15% {
+    transform: translateX(0);
+  }
+  85%, 100% {
+    transform: translateX(var(--marquee-distance, -100px));
+  }
+}
+
+.taskbar-capsule.text-white .lyric-line-active,
+.taskbar-capsule.text-white .track-marquee-text {
+  color: #ffffff;
+  text-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.90),
+    0 0 6px rgba(0, 0, 0, 0.60);
+}
+
+.taskbar-capsule.text-black .lyric-line-active,
+.taskbar-capsule.text-black .track-marquee-text {
+  color: #0f172a;
+  text-shadow: 
+    0 1px 2px rgba(255, 255, 255, 0.85);
+}
+
+
+/* 點擊穿透樣式 (搭配 WS_EX_TRANSPARENT) */
+.taskbar-capsule.click-through {
+  pointer-events: none !important;
+  cursor: default !important;
+}
