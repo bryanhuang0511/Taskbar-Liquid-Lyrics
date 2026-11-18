@@ -1,0 +1,25 @@
+# Build artifacts & release packages
+build/
+dist/
+releases/
+*.zip
+*.exe
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Personal runtime configuration, shortcuts & logs (never track personal screen coordinates)
+config.json
+*.log
+*.log.*
+*.lnk
+*.tmp
+*.bak
+
+# Local scratch & OS metadata
+scratch/
+.pytest_cache/
+.DS_Store
+Thumbs.db
